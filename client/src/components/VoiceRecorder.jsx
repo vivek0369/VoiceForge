@@ -14,6 +14,7 @@ export default function VoiceRecorder({ onRecordingReady, disabled = false }) {
 
   async function startRecording() {
     setRecorderError("");
+    setDuration(0);
     setAudioUrl((previous) => {
       if (previous) URL.revokeObjectURL(previous);
       return "";
@@ -54,7 +55,6 @@ export default function VoiceRecorder({ onRecordingReady, disabled = false }) {
         streamRef.current?.getTracks().forEach((track) => track.stop());
       };
 
-      setDuration(0);
       timerRef.current = window.setInterval(() => setDuration((value) => value + 1), 1000);
       recorder.start();
       setIsRecording(true);
