@@ -1,17 +1,16 @@
 // Implements ElevenLabs voice cloning and text-to-speech proxy handlers.
 const ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1";
 
-function getApiKey(request) {
-  return request.get("X-ElevenLabs-Api-Key") || process.env.ELEVENLABS_API_KEY;
+function getApiKey() {
+  return process.env.ELEVENLABS_API_KEY?.trim();
 }
 
-function requireApiKey(request) {
-  const apiKey = getApiKey(request);
+function requireApiKey() {
+  const apiKey = getApiKey();
   if (!apiKey) {
-    const error = new Error("Missing ElevenLabs API key. Add it to .env or Settings.");
-    error.status = 400;
+    const error = new Error("Missing ElevenLabs API key. Set ELEVENLABS_API_KEY in your server .env file.");
+    error.status = 500;
     throw error;
-    // console.log(process.env.ELEVENLABS_API_KEY);
   }
   return apiKey;
 }
@@ -28,7 +27,7 @@ async function readElevenLabsError(response) {
 
 export async function cloneVoice(request, response, next) {
   try {
-    const apiKey = requireApiKey(request);
+    const apiKey = requireApiKey();
     const audioFile = request.file;
 
     if (!audioFile) {
@@ -63,10 +62,14 @@ export async function cloneVoice(request, response, next) {
   }
 }
 
+const pendingStreams = new Map();
+
 export async function speak(request, response, next) {
   try {
     const apiKey = requireApiKey(request);
     const { text, voice_id: voiceId, voice_settings } = request.body;
+    const apiKey = requireApiKey();
+    const { text, voice_id: voiceId } = request.body;
 
     if (!text || !voiceId) {
       response.status(400).json({ error: "Both text and voice_id are required." });
@@ -91,6 +94,39 @@ export async function speak(request, response, next) {
     const mergedSettings = { ...defaultVoiceSettings, ...sanitizedSettings };
 
     const elevenResponse = await fetch(`${ELEVENLABS_BASE_URL}/text-to-speech/${voiceId}`, {
+    const speechId = Math.random().toString(36).substring(2, 15);
+    pendingStreams.set(speechId, { text, voiceId, apiKey });
+
+    // Set a timeout to clean up if the stream is never requested within 60s
+    setTimeout(() => {
+      pendingStreams.delete(speechId);
+    }, 60000);
+
+    response.json({
+      speechId,
+      audioUrl: `/api/voice/speak/stream/${speechId}`
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function streamSpeech(request, response, next) {
+  try {
+    const { speechId } = request.params;
+    const streamData = pendingStreams.get(speechId);
+
+    if (!streamData) {
+      response.status(404).json({ error: "Speech stream not found or expired." });
+      return;
+    }
+
+    // Clean up immediately after retrieving parameters to prevent memory leaks
+    pendingStreams.delete(speechId);
+
+    const { text, voiceId, apiKey } = streamData;
+
+    const elevenResponse = await fetch(`${ELEVENLABS_BASE_URL}/text-to-speech/${voiceId}/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -105,15 +141,26 @@ export async function speak(request, response, next) {
     });
 
     if (!elevenResponse.ok) {
-      const error = new Error(await readElevenLabsError(elevenResponse));
-      error.status = elevenResponse.status;
-      throw error;
+      const errorText = await readElevenLabsError(elevenResponse);
+      response.status(elevenResponse.status).send(errorText);
+      return;
     }
 
-    const audioBuffer = Buffer.from(await elevenResponse.arrayBuffer());
     response.setHeader("Content-Type", "audio/mpeg");
-    response.setHeader("Content-Length", audioBuffer.length);
-    response.send(audioBuffer);
+    response.setHeader("Transfer-Encoding", "chunked");
+
+    const reader = elevenResponse.body.getReader();
+
+    request.on("close", () => {
+      reader.cancel().catch((err) => console.error("Error cancelling ElevenLabs reader:", err));
+    });
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      response.write(value);
+    }
+    response.end();
   } catch (error) {
     next(error);
   }
