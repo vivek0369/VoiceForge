@@ -80,7 +80,15 @@ export async function speak(request, response, next) {
       use_speaker_boost: true
     };
 
-    const mergedSettings = { ...defaultVoiceSettings, ...voice_settings };
+    const sanitizedSettings = {};
+    if (voice_settings && typeof voice_settings === "object") {
+      if (typeof voice_settings.stability === "number") sanitizedSettings.stability = voice_settings.stability;
+      if (typeof voice_settings.similarity_boost === "number") sanitizedSettings.similarity_boost = voice_settings.similarity_boost;
+      if (typeof voice_settings.style === "number") sanitizedSettings.style = voice_settings.style;
+      if (typeof voice_settings.use_speaker_boost === "boolean") sanitizedSettings.use_speaker_boost = voice_settings.use_speaker_boost;
+    }
+
+    const mergedSettings = { ...defaultVoiceSettings, ...sanitizedSettings };
 
     const elevenResponse = await fetch(`${ELEVENLABS_BASE_URL}/text-to-speech/${voiceId}`, {
       method: "POST",

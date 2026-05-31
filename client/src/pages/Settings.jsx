@@ -31,7 +31,7 @@ export default function Settings() {
     localStorage.getItem("voiceforge:elevenlabsApiKey") || "",
   );
   const [profiles, setProfiles] = React.useState([]);
-  const [dbError, setDbError] = React.useState("");   // ← also missing (see `#2`
+  const [dbError, setDbError] = React.useState("");
   
   React.useEffect(() => {
     async function loadProfiles() {
@@ -64,8 +64,6 @@ export default function Settings() {
     localStorage.setItem("voiceforge:voiceSettings", JSON.stringify(newSettings));
   }
 
-  function removeProfile(voiceId) {
-    setProfiles(deleteVoiceProfile(voiceId));
   async function removeProfile(voiceId) {
     try {
       const next = await deleteVoiceProfile(voiceId);
@@ -131,7 +129,7 @@ export default function Settings() {
         </p>
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white p-5 shadow-soft">
+      <section className="rounded-lg border border-ink/10 bg-white p-5 shadow-soft dark:border-border dark:bg-surface dark:text-neutral-100 dark:shadow-soft-dk">
         <h2 className="text-xl font-bold">Voice Synthesis Settings</h2>
         <p className="mt-1 text-sm text-ink/65 mb-5">Adjust how ElevenLabs generates your cloned speech.</p>
         
@@ -186,7 +184,6 @@ export default function Settings() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-ink/10 bg-white p-5 shadow-soft">
       <section className="rounded-lg border border-ink/10 bg-white p-5 shadow-soft dark:border-border dark:bg-surface dark:text-neutral-100 dark:shadow-soft-dk">
         <h2 className="text-xl font-bold">Saved voice profiles</h2>
         <div className="mt-4 divide-y divide-ink/10 rounded-md border border-ink/10 dark:divide-border dark:border-border">
