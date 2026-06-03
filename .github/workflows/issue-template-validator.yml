@@ -40,6 +40,15 @@ jobs:
               'not needed': 'D93F0B',
               'out of scope': 'D93F0B',
               'go ahead': '0E8A16',
+              'needs maintainer review': 'FBCA04',
+              'ready to work': '0E8A16',
+              'stale-assignment': 'D93F0B',
+              'priority: low': 'C2E0C6',
+              'priority: medium': 'FBCA04',
+              'priority: high': 'D93F0B',
+              'level: easy': 'C2E0C6',
+              'level: medium': 'FBCA04',
+              'level: hard': 'D93F0B',
               'needs-template': 'B60205',
               'needs-quality': 'D4C5F9'
             };
@@ -76,7 +85,7 @@ jobs:
               }
             }
 
-            for (const label of ['duplicate', 'not needed', 'out of scope', 'go ahead']) {
+            for (const label of ['duplicate', 'not needed', 'out of scope', 'go ahead', 'needs maintainer review', 'ready to work', 'stale-assignment', 'priority: low', 'priority: medium', 'priority: high', 'level: easy', 'level: medium', 'level: hard']) {
               await ensureLabel(label);
             }
 
@@ -113,6 +122,7 @@ jobs:
 
             if (templateProblems.length === 0) {
               labelsToAdd.push(matchedProgram.label);
+              labelsToAdd.push('needs maintainer review');
               if (isBugTemplate) labelsToAdd.push('bug');
               if (isFeatureTemplate) labelsToAdd.push('enhancement');
             }
@@ -127,6 +137,8 @@ jobs:
               for (const program of programs) await removeLabel(program.label);
               await removeLabel('bug');
               await removeLabel('enhancement');
+              await removeLabel('needs maintainer review');
+              await removeLabel('ready to work');
             }
 
             await addLabels([...new Set(labelsToAdd)]);

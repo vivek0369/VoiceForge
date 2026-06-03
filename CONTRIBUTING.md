@@ -52,7 +52,13 @@ Pull requests are validated only when the PR author matches the assignee on the 
 
 After a pull request is merged, automation marks the PR with `merged`, `pr-merged`, and `completed`. Linked closing issues receive `completed`, `issue-completed`, and `closed-by-pr`.
 
-Maintainers use decision labels after reviewing issues. `go ahead` means the issue is valid for assigned work. `duplicate`, `not needed`, and `out of scope` close the issue automatically with a maintainer decision comment.
+Maintainers use decision labels after reviewing issues. `go ahead` means the issue is valid for assigned work, adds `ready to work` when an assignee exists, and removes `needs maintainer review`. `stale-assignment` clears the current assignee and reopens the assignment queue. `duplicate`, `not needed`, and `out of scope` close the issue automatically with a maintainer decision comment.
+
+Maintainers can mark issue priority with `priority: low`, `priority: medium`, or `priority: high`, and expected difficulty with `level: easy`, `level: medium`, or `level: hard`. These labels appear in the go-ahead guidance so contributors understand urgency and complexity before starting.
+
+To close an issue as a duplicate with a specific reference, maintainers can comment `/duplicate #issue-number`. The bot verifies the target issue, posts a duplicate message, labels the issue, and closes it.
+
+Maintainers can use `invalid-pr` to close a pull request after the validator has already explained what is wrong. Passing PRs receive `ready for review`; reviews that request changes receive `needs revision`.
 
 To request assignment on an open issue, comment with one of these commands:
 

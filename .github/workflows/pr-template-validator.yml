@@ -50,6 +50,9 @@ jobs:
               'linked-issue-ok': 'C2E0C6',
               'assignee-match': 'C2E0C6',
               'docs-ok': 'C2E0C6',
+              'ready for review': '0E8A16',
+              'invalid-pr': 'D93F0B',
+              'needs revision': 'FBCA04',
               'needs-template': 'B60205',
               'needs-quality': 'D4C5F9',
               'needs-linked-issue': 'D93F0B',
@@ -129,6 +132,10 @@ jobs:
               } catch (error) {
                 core.warning(`Could not assign @${username}: ${error.message}`);
               }
+            }
+
+            for (const label of ['ready for review', 'invalid-pr', 'needs revision']) {
+              await ensureLabel(label);
             }
 
             const programs = [
@@ -267,7 +274,8 @@ jobs:
                 'pr-validated',
                 'template-ok',
                 'linked-issue-ok',
-                'assignee-match'
+                'assignee-match',
+                'ready for review'
               );
               if (hasDocumentationChange) statusLabelsToAdd.push('docs-ok');
             }
@@ -285,9 +293,9 @@ jobs:
 
             if (problems.length === 0) {
               await removeLabels(programLabels.filter(label => label !== matchedProgram.label));
-              await removeLabels(['needs-template', 'needs-quality', 'needs-linked-issue', 'needs-assignee-match', 'needs-title']);
+              await removeLabels(['needs-template', 'needs-quality', 'needs-linked-issue', 'needs-assignee-match', 'needs-title', 'needs revision']);
             } else {
-              await removeLabels([...programLabels, 'pr-validated', 'template-ok', 'linked-issue-ok', 'assignee-match', 'docs-ok']);
+              await removeLabels([...programLabels, 'pr-validated', 'template-ok', 'linked-issue-ok', 'assignee-match', 'docs-ok', 'ready for review']);
             }
 
             const marker = '<!-- voiceforge-pr-template-validator -->';

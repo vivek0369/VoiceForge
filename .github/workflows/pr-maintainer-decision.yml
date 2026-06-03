@@ -1,0 +1,242 @@
+name: PR Maintainer Decision
+
+on:
+  pull_request_target:
+    types: [labeled, review_requested]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-maintainer-decision-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    if: github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Apply PR maintainer decision
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = pr.number;
+            const username = pr.user.login;
+            const labels = (pr.labels || []).map(label => label.name);
+            const normalizedLabels = labels.map(label => label.toLowerCase());
+
+            const labelDefinitions = {
+              'invalid-pr': 'D93F0B',
+              'needs revision': 'FBCA04',
+              'ready for review': '0E8A16',
+              closed: '6A737D'
+            };
+
+            async function actorCanMakeMaintainerDecision() {
+              try {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner,
+                  repo,
+                  username: context.actor
+                });
+                return ['admin', 'maintain', 'write'].includes(data.permission);
+              } catch (error) {
+                core.warning(`Could not verify maintainer permission for @${context.actor}: ${error.message}`);
+                return false;
+              }
+            }
+
+            async function ensureLabel(name) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (error) {
+                if (error.status === 404) {
+                  try {
+                    await github.rest.issues.createLabel({
+                      owner,
+                      repo,
+                      name,
+                      color: labelDefinitions[name] || 'EDEDED'
+                    });
+                  } catch (createError) {
+                    if (createError.status === 403) {
+                      core.warning(`Could not create label "${name}": ${createError.message}`);
+                      return;
+                    }
+                    throw createError;
+                  }
+                } else {
+                  throw error;
+                }
+              }
+            }
+
+            async function addLabels(names) {
+              for (const name of names) await ensureLabel(name);
+              try {
+                await github.rest.issues.addLabels({ owner, repo, issue_number, labels: names });
+              } catch (error) {
+                if (error.status === 403) {
+                  core.warning(`Could not add labels "${names.join(', ')}" to PR #${issue_number}: ${error.message}`);
+                  return;
+                }
+                throw error;
+              }
+            }
+
+            async function removeLabel(name) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+              } catch (error) {
+                if (error.status === 403) {
+                  core.warning(`Could not remove label "${name}" from PR #${issue_number}: ${error.message}`);
+                  return;
+                }
+                if (error.status !== 404) throw error;
+              }
+            }
+
+            async function createOrUpdateComment(marker, body) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number,
+                per_page: 100
+              });
+              const existing = comments.find(comment =>
+                comment.user.type === 'Bot' &&
+                comment.body &&
+                comment.body.includes(marker)
+              );
+
+              try {
+                if (existing) {
+                  if (existing.body.trim() === body.trim()) return;
+                  await github.rest.issues.updateComment({
+                    owner,
+                    repo,
+                    comment_id: existing.id,
+                    body
+                  });
+                } else {
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number,
+                    body
+                  });
+                }
+              } catch (error) {
+                if (error.status === 403) {
+                  core.warning(`Could not write PR maintainer decision comment: ${error.message}`);
+                  return;
+                }
+                throw error;
+              }
+            }
+
+            async function hasAutomationWarning() {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number,
+                per_page: 100
+              });
+              return comments.some(comment =>
+                comment.user.type === 'Bot' &&
+                comment.body &&
+                (
+                  (comment.body.includes('<!-- voiceforge-pr-template-validator -->') && comment.body.includes('## PR Update Needed')) ||
+                  comment.body.includes('<!-- voiceforge-pr-invalid-warning -->')
+                )
+              );
+            }
+
+            const canDecide = await actorCanMakeMaintainerDecision();
+            if (!canDecide) {
+              core.warning(`Ignoring PR maintainer decision because @${context.actor} does not have write, maintain, or admin permission.`);
+              return;
+            }
+
+            if (context.eventName === 'pull_request_review' && context.payload.review?.state === 'changes_requested') {
+              await addLabels(['needs revision']);
+              await removeLabel('ready for review');
+              const marker = '<!-- voiceforge-pr-needs-revision -->';
+              const body =
+                `${marker}\n` +
+                `## Changes Requested\n\n` +
+                `Hi @${username}, a maintainer requested changes on this PR.\n\n` +
+                `Please review the feedback, update the branch, and keep the PR focused on the linked issue scope.\n\n` +
+                `| Status | Details |\n` +
+                `| --- | --- |\n` +
+                `| Review state | Changes requested |\n` +
+                `| Label applied | \`needs revision\` |\n` +
+                `| Next step | Push updates addressing maintainer feedback |\n\n` +
+                `VoiceForge automation`;
+              await createOrUpdateComment(marker, body);
+              return;
+            }
+
+            if (!normalizedLabels.includes('invalid-pr')) return;
+
+            if (!(await hasAutomationWarning())) {
+              const warningMarker = '<!-- voiceforge-pr-invalid-warning -->';
+              const warningBody =
+                `${warningMarker}\n` +
+                `## Invalid PR Label Noted\n\n` +
+                `Hi @${username}, a maintainer marked this PR with \`invalid-pr\`.\n\n` +
+                `VoiceForge automation will not close the PR until there is a visible correction message on the PR. This keeps closure decisions reviewable and gives contributors clear next steps.\n\n` +
+                `| Status | Details |\n` +
+                `| --- | --- |\n` +
+                `| Maintainer label | \`invalid-pr\` |\n` +
+                `| Closure | Paused until an automation warning is present |\n` +
+                `| Next step | Check template, linked issue, issue assignment, and title format. |\n\n` +
+                `After the validator posts its correction message, a maintainer may re-apply or update the invalid decision if closure is still needed.\n\n` +
+                `VoiceForge automation`;
+              await createOrUpdateComment(warningMarker, warningBody);
+              return;
+            }
+
+            const marker = '<!-- voiceforge-pr-invalid-close -->';
+            const body =
+              `${marker}\n` +
+              `## PR Closed By Maintainer Decision\n\n` +
+              `Hi @${username}, thank you for taking the time to open this pull request.\n\n` +
+              `A maintainer marked this PR as \`invalid-pr\`, so VoiceForge automation is closing it to keep the review queue focused.\n\n` +
+              `| Review Item | Decision |\n` +
+              `| --- | --- |\n` +
+              `| Maintainer label | \`invalid-pr\` |\n` +
+              `| PR status | Closed after maintainer review |\n` +
+              `| Next step | Please read the validator comment and open a new PR only after the issue, assignee, and template requirements are correct. |\n\n` +
+              `If you believe this was a mistake, please ask a maintainer before reopening.\n\n` +
+              `VoiceForge automation`;
+
+            await createOrUpdateComment(marker, body);
+            await addLabels(['closed']);
+            await removeLabel('ready for review');
+
+            if (pr.state !== 'closed') {
+              try {
+                await github.rest.pulls.update({
+                  owner,
+                  repo,
+                  pull_number: issue_number,
+                  state: 'closed'
+                });
+              } catch (error) {
+                if (error.status === 403) {
+                  core.warning(`Could not close PR #${issue_number}: ${error.message}`);
+                  return;
+                }
+                throw error;
+              }
+            }

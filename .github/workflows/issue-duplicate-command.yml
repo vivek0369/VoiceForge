@@ -1,0 +1,230 @@
+name: Issue Duplicate Command
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: issue-duplicate-command-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  duplicate:
+    if: |
+      github.event.issue.pull_request == null &&
+      github.event.issue.state == 'open' &&
+      github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Close issue as duplicate with reference
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = context.payload.issue;
+            const comment = context.payload.comment;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = issue.number;
+            const body = comment.body || '';
+
+            const match = body.trim().match(/^\/duplicate\s+#(\d+)\s*$/i);
+            if (!match) return;
+
+            const duplicateOf = Number(match[1]);
+            if (duplicateOf === issue_number) {
+              core.warning('Ignoring duplicate command because it points to the same issue.');
+              return;
+            }
+
+            const labelDefinitions = {
+              duplicate: 'CFD3D7',
+              closed: '6A737D'
+            };
+
+            async function actorCanMakeMaintainerDecision() {
+              try {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner,
+                  repo,
+                  username: context.actor
+                });
+                return ['admin', 'maintain', 'write'].includes(data.permission);
+              } catch (error) {
+                core.warning(`Could not verify maintainer permission for @${context.actor}: ${error.message}`);
+                return false;
+              }
+            }
+
+            async function ensureLabel(name) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (error) {
+                if (error.status === 404) {
+                  try {
+                    await github.rest.issues.createLabel({
+                      owner,
+                      repo,
+                      name,
+                      color: labelDefinitions[name] || 'EDEDED'
+                    });
+                  } catch (createError) {
+                    if (createError.status === 403) {
+                      core.warning(`Could not create label "${name}": ${createError.message}`);
+                      return;
+                    }
+                    throw createError;
+                  }
+                } else {
+                  throw error;
+                }
+              }
+            }
+
+            async function addLabels(names) {
+              for (const name of names) await ensureLabel(name);
+              try {
+                await github.rest.issues.addLabels({ owner, repo, issue_number, labels: names });
+              } catch (error) {
+                if (error.status === 403) {
+                  core.warning(`Could not add duplicate labels: ${error.message}`);
+                  return;
+                }
+                throw error;
+              }
+            }
+
+            async function removeLabel(name) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+              } catch (error) {
+                if (error.status === 403) {
+                  core.warning(`Could not remove label "${name}": ${error.message}`);
+                  return;
+                }
+                if (error.status !== 404) throw error;
+              }
+            }
+
+            async function createOrUpdateComment(marker, commentBody) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number,
+                per_page: 100
+              });
+              const existing = comments.find(existingComment =>
+                existingComment.user.type === 'Bot' &&
+                existingComment.body &&
+                existingComment.body.includes(marker)
+              );
+
+              try {
+                if (existing) {
+                  if (existing.body.trim() === commentBody.trim()) return;
+                  await github.rest.issues.updateComment({
+                    owner,
+                    repo,
+                    comment_id: existing.id,
+                    body: commentBody
+                  });
+                } else {
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number,
+                    body: commentBody
+                  });
+                }
+              } catch (error) {
+                if (error.status === 403) {
+                  core.warning(`Could not write duplicate command comment: ${error.message}`);
+                  return;
+                }
+                throw error;
+              }
+            }
+
+            if (!(await actorCanMakeMaintainerDecision())) {
+              core.warning(`Ignoring /duplicate command because @${context.actor} does not have write, maintain, or admin permission.`);
+              return;
+            }
+
+            let targetIssue;
+            try {
+              const response = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number: duplicateOf
+              });
+              targetIssue = response.data;
+            } catch (error) {
+              if (error.status === 404) {
+                const marker = '<!-- voiceforge-duplicate-command-error -->';
+                const errorBody =
+                  `${marker}\n` +
+                  `## Duplicate Target Not Found\n\n` +
+                  `@${context.actor}, I could not close this issue as a duplicate because #${duplicateOf} was not found.\n\n` +
+                  `Please check the issue number and run the command again, for example:\n\n` +
+                  `\`\`\`text\n` +
+                  `/duplicate #123\n` +
+                  `\`\`\`\n\n` +
+                  `VoiceForge automation`;
+                await createOrUpdateComment(marker, errorBody);
+                return;
+              }
+              throw error;
+            }
+
+            if (targetIssue.pull_request) {
+              const marker = '<!-- voiceforge-duplicate-command-error -->';
+              const errorBody =
+                `${marker}\n` +
+                `## Duplicate Target Must Be An Issue\n\n` +
+                `@${context.actor}, #${duplicateOf} is a pull request, not an issue.\n\n` +
+                `Please reference the existing issue that should collect the discussion.\n\n` +
+                `VoiceForge automation`;
+              await createOrUpdateComment(marker, errorBody);
+              return;
+            }
+
+            const marker = '<!-- voiceforge-issue-duplicate-command -->';
+            const duplicateBody =
+              `${marker}\n` +
+              `## Duplicate Issue Closed\n\n` +
+              `Hi @${issue.user.login}, thank you for opening this issue.\n\n` +
+              `A maintainer reviewed it and marked it as a duplicate of #${duplicateOf}. To keep discussion, progress, and review context in one place, this issue is being closed.\n\n` +
+              `| Review Item | Decision |\n` +
+              `| --- | --- |\n` +
+              `| Duplicate of | #${duplicateOf} |\n` +
+              `| Maintainer command | \`/duplicate #${duplicateOf}\` |\n` +
+              `| Issue status | Closed as duplicate |\n` +
+              `| Next step | Please continue the discussion on #${duplicateOf}. |\n\n` +
+              `If you believe this issue covers a different case, please ask a maintainer before opening a new one.\n\n` +
+              `VoiceForge automation`;
+
+            await createOrUpdateComment(marker, duplicateBody);
+            await addLabels(['duplicate', 'closed']);
+            await removeLabel('go ahead');
+            await removeLabel('ready to work');
+            await removeLabel('needs maintainer review');
+
+            try {
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number,
+                state: 'closed',
+                state_reason: 'not_planned'
+              });
+            } catch (error) {
+              if (error.status === 403) {
+                core.warning(`Could not close duplicate issue #${issue_number}: ${error.message}`);
+                return;
+              }
+              throw error;
+            }
