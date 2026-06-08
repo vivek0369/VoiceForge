@@ -16,27 +16,36 @@ export default function Call() {
   const localVideoRef = React.useRef(null);
   const [activeProfile, setActiveProfile] = React.useState(null);
   const [language, setLanguage] = React.useState(() => {
-  const savedLanguage = localStorage.getItem("voiceforge:language");
+  try {
+    const savedLanguage = localStorage.getItem("voiceforge:language");
 
-  const legacyToCode = {
-    English: "en",
-    Hindi: "hi",
-    Spanish: "es",
-    French: "fr",
-    German: "de",
-    Portuguese: "pt",
-    Japanese: "ja",
-  };
+    const legacyToCode = {
+      English: "en",
+      Hindi: "hi",
+      Spanish: "es",
+      French: "fr",
+      German: "de",
+      Portuguese: "pt",
+      Japanese: "ja",
+    };
 
-  const normalizedLanguage =
-    legacyToCode[savedLanguage] || savedLanguage;
+    const normalizedLanguage =
+      legacyToCode[savedLanguage] || savedLanguage;
 
-  return ["en", "hi", "es", "fr", "de", "pt", "ja"].includes(normalizedLanguage)
-    ? normalizedLanguage
-    : "en";
+    return ["en", "hi", "es", "fr", "de", "pt", "ja"].includes(normalizedLanguage)
+      ? normalizedLanguage
+      : "en";
+  } catch {
+    return "en";
+  }
 });
+
 React.useEffect(() => {
-  localStorage.setItem("voiceforge:language", language);
+  try {
+    localStorage.setItem("voiceforge:language", language);
+  } catch {
+    // storage unavailable
+  }
 }, [language]);
   const [dbError, setDbError] = React.useState("");
   const { speak, status, error, audioUrl } = useTTS();
@@ -291,15 +300,19 @@ React.useEffect(() => {
         )}
       </section>
       <section className="rounded-lg border border-ink/10 bg-white p-4 shadow-soft dark:border-border dark:bg-surface">
-  <label className="mb-2 block text-sm font-bold dark:text-neutral-100">
-    Output Language
-  </label>
+  <label
+  htmlFor="output-language"
+  className="mb-2 block text-sm font-bold dark:text-neutral-100"
+>
+  Output Language
+</label>
 
-  <select
-    value={language}
-    onChange={(e) => setLanguage(e.target.value)}
-    className="w-full rounded-md border border-ink/15 bg-cloud p-3 dark:border-border dark:bg-black dark:text-neutral-100"
-  >
+<select
+  id="output-language"
+  value={language}
+  onChange={(e) => setLanguage(e.target.value)}
+  className="w-full rounded-md border border-ink/15 bg-cloud p-3 dark:border-border dark:bg-black dark:text-neutral-100"
+>
    <option value="en">English</option>
 <option value="hi">Hindi</option>
 <option value="es">Spanish</option>
