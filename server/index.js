@@ -35,6 +35,10 @@ const globalLimiter = rateLimit({
 });
 
 app.use(globalLimiter);
+// Enable trust proxy so rate limiters can identify real client IPs
+// behind reverse proxies (e.g., load balancers, CDNs).
+// Set to 1 for single-hop proxies; adjust based on your deployment topology.
+app.set("trust proxy", 1);
 
 app.use(cors({ origin: clientUrl, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
