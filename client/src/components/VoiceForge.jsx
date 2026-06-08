@@ -107,12 +107,14 @@ export default function VoiceForge() {
   const hasAnnouncedRef = useRef(false);
   const warningTextRef = useRef("");
 
-  if (charsLeft < 50 && !hasAnnouncedRef.current) {
-    hasAnnouncedRef.current = true;
-    warningTextRef.current = `Warning: only ${charsLeft} characters remaining.`;
-  } else if (charsLeft >= 50) {
-    hasAnnouncedRef.current = false;
-  }
+  React.useEffect(() => {
+    if (charsLeft < 50 && !hasAnnouncedRef.current) {
+      hasAnnouncedRef.current = true;
+      warningTextRef.current = `Warning: only ${charsLeft} characters remaining.`;
+    } else if (charsLeft >= 50) {
+      hasAnnouncedRef.current = false;
+    }
+  }, [charsLeft]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-white font-sans antialiased dark:bg-black">
