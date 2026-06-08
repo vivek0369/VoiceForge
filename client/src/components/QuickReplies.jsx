@@ -36,7 +36,7 @@ export function QuickReplies({ onSelect }) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(replies));
     } catch {
-      // storage quota exceeded — silently skip
+      console.error('Failed to persist quick replies to localStorage');
     }
   }, [replies]);
 
