@@ -454,8 +454,8 @@ jobs:
             }
             if (linkedIssueNumbers.length > 0 && !needsLabelsToAdd.includes('needs-linked-issue')) await removeLabel('needs-linked-issue');
             if (linkedIssues.length > 0 && !needsLabelsToAdd.includes('needs-assignee-match')) await removeLabel('needs-assignee-match');
-            if (requiredSections.every(section => hasHeading(section))) await removeLabel('needs-template');
-            if (cleanedBody.length >= 120) await removeLabel('needs-quality');
+            if (!needsLabelsToAdd.includes('needs-template')) await removeLabel('needs-template');
+            if (!needsLabelsToAdd.includes('needs-quality')) await removeLabel('needs-quality');
             if (validTitleRegex.test(title)) await removeLabel('needs-title');
             if (!tooManyFilesChanged) await removeLabel('large PR');
 
