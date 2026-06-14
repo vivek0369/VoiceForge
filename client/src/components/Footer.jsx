@@ -4,7 +4,7 @@ const Footer = ({ onNavigate, tabs }) => {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="w-full mx-auto max-w-7xl px-3 pb-6 pt-2 sm:px-4">
+    <footer className="w-full mx-auto max-w-7xl px-3 pb-6 pt-2 sm:px-4" aria-label="Site footer">
       {/* The Styled Black Box */}
       <div className="w-full bg-black text-white border border-ink/20 rounded-xl px-5 py-6 flex flex-col gap-6 shadow-md dark:bg-surface dark:border-border md:px-8 md:py-8 md:gap-8">
 
@@ -82,11 +82,12 @@ const Footer = ({ onNavigate, tabs }) => {
             <h3 className="text-sm font-semibold text-white tracking-widest uppercase">
               Quick Links
             </h3>
-            <nav className="flex flex-col gap-2 text-sm text-neutral-400">
+            <nav className="flex flex-col gap-2 text-sm text-neutral-400" aria-label="Quick links">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => onNavigate?.(tab.id)}
+                  aria-label={`Go to ${tab.label}`}
                   className="text-left capitalize hover:text-white transition-colors duration-150 bg-transparent border-none cursor-pointer p-0"
                 >
                   {tab.label}
@@ -124,16 +125,16 @@ const Footer = ({ onNavigate, tabs }) => {
               >
                 Privacy Policy
               </button>
-              <a href="#" className="hover:text-white transition-colors duration-150">
+              <span className="text-neutral-400 cursor-default" aria-disabled="true">
                 Terms of Service
-              </a>
+              </span>
             </nav>
           </div>
 
         </div>
 
         {/* Divider */}
-        <div className="w-full h-px bg-neutral-800/60 dark:bg-border/40" />
+        <div className="w-full h-px bg-neutral-800/60 dark:bg-border/40" aria-hidden="true" />
 
         {/* Bottom Bar */}
         <div className="w-full flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-neutral-400 font-medium tracking-wide">
