@@ -29,6 +29,7 @@ export default function VoiceForge() {
   const {
     history,
     favorites,
+    sessionTranscript,
     addMessage,
     removeMessage,
     toggleFavorite,
@@ -182,6 +183,7 @@ export default function VoiceForge() {
         <SpeechHistory
           history={history}
           favorites={favorites}
+          sessionTranscript={sessionTranscript}
           onReuse={(text) => { handleReuse(text); setHistoryOpen(false); }}
           onReplay={handleReplay}
           onToggleFav={toggleFavorite}
