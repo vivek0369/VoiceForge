@@ -9,7 +9,8 @@ export default React.forwardRef(function VideoPreview({
   isSpeaking,
   onSpeakingChange,
   calibration = { xOffset: 0, yOffset: 0, scale: 1.0 },
-  isCalibrating = false
+  isCalibrating = false,
+  avatarImage = null,
 }, ref) {
   const videoRef = React.useRef(null);
   const animationRef = React.useRef(null);
@@ -132,7 +133,20 @@ export default React.forwardRef(function VideoPreview({
       context.fillRect(0, 0, canvas.width, canvas.height);
 
       const video = videoRef.current;
-      if (video?.readyState >= 2) {
+
+      // Privacy mode: draw static avatar image with object-fit cover
+      if (avatarImage && avatarImage.complete && avatarImage.naturalWidth) {
+        const imgW = avatarImage.naturalWidth;
+        const imgH = avatarImage.naturalHeight;
+        const canW = canvas.width;
+        const canH = canvas.height;
+        const scale = Math.max(canW / imgW, canH / imgH);
+        const drawW = imgW * scale;
+        const drawH = imgH * scale;
+        const dx = (canW - drawW) / 2;
+        const dy = (canH - drawH) / 2;
+        context.drawImage(avatarImage, dx, dy, drawW, drawH);
+      } else if (video?.readyState >= 2) {
         if (blurEnabled && segmenterRef.current) {
           if (!isSegmentingRef.current) {
             isSegmentingRef.current = true;
@@ -155,7 +169,7 @@ export default React.forwardRef(function VideoPreview({
         context.font = "600 24px Inter, sans-serif";
         context.textAlign = "center";
         context.fillText(
-          "Waiting for webcam",
+          avatarImage ? "Loading avatar..." : "Waiting for webcam",
           canvas.width / 2,
           canvas.height / 2,
         );
@@ -193,7 +207,7 @@ export default React.forwardRef(function VideoPreview({
 
     animationRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animationRef.current);
-  }, [ref, isSpeaking, theme]);
+  }, [ref, isSpeaking, theme, avatarImage]);
 
   return (
     <section className="rounded-lg border border-ink/10 bg-white p-5 shadow-soft dark:border-border dark:bg-surface dark:text-neutral-100 dark:shadow-soft-dk">
@@ -201,16 +215,18 @@ export default React.forwardRef(function VideoPreview({
         <div>
           <h2 className="text-lg font-bold flex items-center gap-2">
             Lip-synced output
-            <button
-              onClick={() => setBlurEnabled(!blurEnabled)}
-              className={`ml-2 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                blurEnabled 
-                  ? "bg-coral text-white" 
-                  : "bg-ink/10 text-ink/70 hover:bg-ink/20 dark:bg-border dark:text-muted dark:hover:bg-border/80"
-              }`}
-            >
-              {blurEnabled ? "Blur ON" : "Blur OFF"}
-            </button>
+            {!avatarImage && (
+              <button
+                onClick={() => setBlurEnabled(!blurEnabled)}
+                className={`ml-2 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                  blurEnabled 
+                    ? "bg-coral text-white" 
+                    : "bg-ink/10 text-ink/70 hover:bg-ink/20 dark:bg-border dark:text-muted dark:hover:bg-border/80"
+                }`}
+              >
+                {blurEnabled ? "Blur ON" : "Blur OFF"}
+              </button>
+            )}
           </h2>
           <p className="mt-1 text-sm text-ink/65 dark:text-muted">
             {modelStatus}
