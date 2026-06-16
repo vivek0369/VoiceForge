@@ -1,6 +1,7 @@
 // Implements ElevenLabs voice cloning and text-to-speech proxy handlers.
 import crypto from "crypto";
 import { getIsMock } from "../utils/mock.js"; // adjust path to actual location
+import { isValidLanguageCode } from "../utils/languages.js";
 
 const ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1";
 
@@ -29,18 +30,18 @@ const ALGORITHM = "aes-256-gcm";
 function encryptToken(payload) {
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
-  
+
   let encrypted = cipher.update(JSON.stringify(payload), "utf8", "base64");
   encrypted += cipher.final("base64");
-  
+
   const authTag = cipher.getAuthTag().toString("base64");
-  
+
   const tokenData = {
     iv: iv.toString("base64"),
     tag: authTag,
     data: encrypted
   };
-  
+
   return Buffer.from(JSON.stringify(tokenData)).toString("base64url");
 }
 
@@ -48,25 +49,25 @@ function decryptToken(token) {
   try {
     const rawJson = Buffer.from(token, "base64url").toString("utf8");
     const { iv, tag, data } = JSON.parse(rawJson);
-    
+
     const decipher = crypto.createDecipheriv(
       ALGORITHM,
       ENCRYPTION_KEY,
       Buffer.from(iv, "base64")
     );
     decipher.setAuthTag(Buffer.from(tag, "base64"));
-    
+
     let decrypted = decipher.update(data, "base64", "utf8");
     decrypted += decipher.final("utf8");
-    
+
     const payload = JSON.parse(decrypted);
-    
+
     if (payload.expiresAt && Date.now() > payload.expiresAt) {
       const error = new Error("Speech stream has expired.");
       error.status = 403;
       throw error;
     }
-    
+
     return payload;
   } catch (error) {
     if (error.status === 403) {
@@ -176,25 +177,45 @@ export async function cloneVoice(request, response, next) {
 export async function speak(request, response, next) {
   try {
     const {
-  text,
-  voice_id: voiceId,
-  language_code,
-  voice_settings
-} = request.body;
+      text,
+      voice_id: voiceId,
+      language_code,
+      voice_settings
+    } = request.body;
 
     const apiKey = getIsMock() ? null : requireApiKey(request);
 
-    if (!text || !voiceId) {
+    // Fix (Issue 1): trim both fields before checking so whitespace-only
+    // strings ("   ") are treated the same as missing values and never reach
+    // encryptToken / the ElevenLabs URL interpolation.
+    const trimmedText = typeof text === "string" ? text.trim() : "";
+    const trimmedVoiceId = typeof voiceId === "string" ? voiceId.trim() : "";
+
+    if (!trimmedText && !trimmedVoiceId) {
       response.status(400).json({ error: "Both text and voice_id are required." });
       return;
     }
-    if (text.length > 500) {
+    if (!trimmedText) {
+      response.status(400).json({ error: "text is required and must not be blank." });
+      return;
+    }
+    if (!trimmedVoiceId) {
+      response.status(400).json({ error: "voice_id is required and must not be blank." });
+      return;
+    }
+    if (trimmedText.length > 500) {
       response.status(400).json({ error: "Text too long; maximum 500 characters for streaming." });
+      return;
+    }
+    if (!isValidLanguageCode(language_code)) {
+      response.status(400).json({
+        error: `Unsupported language code "${language_code}". See ElevenLabs eleven_multilingual_v2 docs for supported codes.`
+      });
       return;
     }
 
     const expiresAt = Date.now() + 60000;
-    const token = encryptToken({ text, voiceId, apiKey, language_code, voice_settings, expiresAt });
+    const token = encryptToken({ text: trimmedText, voiceId: trimmedVoiceId, apiKey, language_code, voice_settings, expiresAt });
 
     response.json({
       speechId: token,
@@ -231,11 +252,11 @@ export async function streamSpeech(request, response, next) {
         Accept: "audio/mpeg"
       },
       body: JSON.stringify({
-  text,
-  model_id: "eleven_multilingual_v2",
-  language_code,
-  voice_settings: voice_settings
-})
+        text,
+        model_id: "eleven_multilingual_v2",
+        language_code,
+        voice_settings: voice_settings
+      })
     });
 
     if (!elevenResponse.ok) {
@@ -270,4 +291,3 @@ export function getStatus(request, response) {
     hasServerKey: Boolean(process.env.ELEVENLABS_API_KEY?.trim())
   });
 }
-
