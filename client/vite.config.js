@@ -13,6 +13,8 @@ export default defineConfig({
         name: 'VoiceForge',
         short_name: 'VoiceForge',
         description: 'VoiceForge turns typed text into cloned speech and lip-synced call video.',
+        display: 'standalone',
+        start_url: '/',
         theme_color: '#ffffff',
         background_color: '#ffffff',
         icons: [
