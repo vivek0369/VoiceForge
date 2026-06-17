@@ -210,7 +210,11 @@ export default function App() {
 
       {/* Main Content Area */}
       <main id="main-content" className="flex-grow" role="main">
-        {activeTab === "compose" && <VoiceForge />}
+        {activeTab === "compose" && (
+          <div id="tabpanel-compose" role="tabpanel" aria-label="Compose panel">
+            <VoiceForge />
+          </div>
+        )}
 
         {activeTab !== "compose" && (
           <div id={`tabpanel-${activeTab}`} role="tabpanel" aria-label={`${activeTab} panel`} className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -259,10 +263,9 @@ export default function App() {
       
       <KeyboardShortcutsModal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <ScrollToBottomButton activeTab={activeTab} />
-      <Footer onNavigate={navigateTo} tabs={tabs} />
+      <Footer onNavigate={navigateTo} tabs={tabs} onOpenShortcuts={() => setShortcutsOpen(true)} />
 
 
     </div>
   );
 }
-
