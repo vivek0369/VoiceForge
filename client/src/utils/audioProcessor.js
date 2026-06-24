@@ -80,6 +80,14 @@ export class AudioProcessor {
   }
 
   /**
+   * Returns the current time from the audio context for exact A/V synchronization.
+   * @returns {number}
+   */
+  getAudioTime() {
+    return this.audioContext ? this.audioContext.currentTime : 0;
+  }
+
+  /**
    * Cleans up audio context and analyzer.
    */
   dispose() {

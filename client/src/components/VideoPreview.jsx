@@ -108,6 +108,9 @@ export default React.forwardRef(function VideoPreview({
     const textColor = isDark ? "#e2e8f0" : "#16201d";
     const mouthColor = isDark ? "rgba(226, 232, 240, 0.82)" : "rgba(22, 32, 29, 0.82)";
 
+    let lastSyncTime = 0;
+    let audioTimeOffset = null;
+
     function draw(timestamp) {
       context.fillStyle = bgColor;
       context.fillRect(0, 0, canvas.width, canvas.height);
@@ -136,8 +139,21 @@ export default React.forwardRef(function VideoPreview({
              // 1. Get Audio Features
              const melFeatures = audioProcessorRef.current.getLatestFeatures();
              
-             // 2. Get Face Crop
-             const landmarks = faceProcessorRef.current.detectFace(video, timestamp);
+             // 2. Synchronize visual timestamp to the audio master clock to prevent drift
+             let syncTimestamp = timestamp;
+             const audioTime = audioProcessorRef.current.getAudioTime() * 1000;
+             if (audioTime > 0) {
+                if (audioTimeOffset === null) {
+                   audioTimeOffset = timestamp - audioTime;
+                }
+                const targetSyncTime = audioTime + audioTimeOffset;
+                // MediaPipe requires strictly increasing timestamps
+                syncTimestamp = targetSyncTime <= lastSyncTime ? lastSyncTime + 1 : targetSyncTime;
+                lastSyncTime = syncTimestamp;
+             }
+
+             // 3. Get Face Crop
+             const landmarks = faceProcessorRef.current.detectFace(video, syncTimestamp);
              
              if (melFeatures && landmarks) {
                // TODO: Construct Tensors and run inference when real model is available
