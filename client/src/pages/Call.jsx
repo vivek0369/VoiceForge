@@ -28,7 +28,7 @@ export default function Call() {
     persistLanguage(language);
   }, [language]);
   const [dbError, setDbError] = React.useState("");
-  const { speak, status, error, audioUrl } = useTTS();
+  const { speak, status, error, audioUrl, engine } = useTTS();
   const virtualCamera = useVirtualCamera(canvasRef);
 
   React.useEffect(() => {
@@ -42,6 +42,14 @@ export default function Call() {
       }
     }
     loadActiveProfile();
+
+    window.addEventListener("voiceforge:profileChanged", loadActiveProfile);
+    window.addEventListener("storage", loadActiveProfile);
+
+    return () => {
+      window.removeEventListener("voiceforge:profileChanged", loadActiveProfile);
+      window.removeEventListener("storage", loadActiveProfile);
+    };
   }, []);
 
   const [isCalibrationOpen, setIsCalibrationOpen] = React.useState(false);
@@ -171,22 +179,32 @@ export default function Call() {
 }, [showToast, privacyMode]);
 
   async function handleSpeak(text) {
-    if (!activeProfile?.voice_id) return;
-    try {
-      await speak({
-  text,
-  voiceId: activeProfile.voice_id,
-  language_code: language,
-});
-    } catch (err) {
-      console.error("TTS streaming error:", err);
-      showToast("Speech generation failed", "error");
+  if (!activeProfile?.voice_id) return;
+
+  try {
+    const result = await speak({
+      text,
+      voiceId: activeProfile.voice_id,
+      language_code: language,
+    });
+
+    if (result?.fallback) {
+      showToast("Using browser voice fallback", "info");
     }
+  } catch (err) {
+    console.error("TTS streaming error:", err);
+    showToast("Speech generation failed", "error");
   }
+}
 
   return (
     <div className="space-y-5">
       {/* ── Header card ───────────────────────────────────────────────────── */}
+      {engine === "browser" && (
+      <div className="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm font-medium text-yellow-800">
+        Using Browser Voice (Offline Mode)
+      </div>
+    )}
       <section className="rounded-lg border border-ink/10 bg-white p-4 shadow-soft dark:border-border dark:bg-surface dark:shadow-soft-dk">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -250,7 +268,7 @@ export default function Call() {
         {isCalibrationOpen && (
           <div className="mt-4 border-t border-ink/10 pt-4">
             <p className="text-sm text-ink/65 mb-4">
-              Calibrate the animated fallback mouth position and size overlay to align with your camera.
+              Calibrate the audio-driven mouth position and size overlay to align with your camera.
             </p>
             <div className="grid gap-4 sm:gap-6 sm:grid-cols-3">
               <div>
